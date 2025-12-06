@@ -18,18 +18,23 @@
 
 package io.pixelsdb.flink;
 
+import io.pixelsdb.flink.config.PixelsFlinkConfig;
 import io.pixelsdb.pixels.sink.SinkProto;
+import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSink;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.util.ParameterTool;
-import org.apache.flink.util.ParameterTool;
+import org.apache.flink.table.types.logical.LogicalType;
+import org.apache.flink.table.types.logical.RowType;
 import org.apache.iceberg.Table;
-import org.apache.iceberg.aws.glue.GlueCatalog; // 使用 GlueCatalog
+import org.apache.iceberg.aws.glue.GlueCatalog;
+import org.apache.flink.table.types.logical.*;
 import org.apache.iceberg.flink.sink.FlinkSink;
 import org.apache.flink.table.data.RowData;
 
 import org.apache.iceberg.catalog.TableIdentifier;
+
+import java.util.ArrayList;
 import java.util.List; // 导入 List 用于获取等值字段
 import java.util.Set;
 
@@ -42,99 +47,182 @@ public class PixelsFlinkSinkJob
 
     public static void main(String[] args) throws Exception {
 
-        final ParameterTool params = ParameterTool.fromArgs(args);
-
-        // --- 1. 参数校验和获取 ---
-
-        // 确保传递了所有必要的参数
-        params.getRequired("source");
-        String serverHost = params.getRequired("source.server.host");
-        // 假设默认端口为 8080
-        int serverPort = params.getInt("source.server.port", 8080);
-        String databaseName = params.getRequired("source.database.name"); // 使用更标准的数据库名
-        String tableName = params.getRequired("source.tablename");
-
-        // Flink Job 参数
-        int sinkParallelism = params.getInt("sink.parallelism", 4);
-        long checkpointInterval = params.getLong("checkpoint.interval.ms", 5000L);
-
-
-        // --- 2. Flink 环境设置 ---
-
+        PixelsFlinkConfig config = new PixelsFlinkConfig(args);
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        // 推荐设置 Checkpoint，Iceberg Sink 依赖它来保证写入一致性
-        env.enableCheckpointing(checkpointInterval);
 
-        // 设置默认并行度
-        env.setParallelism(params.getInt("job.parallelism", 1));
+        startJob(env, config);
 
 
-        // --- 3. 初始化 Iceberg Table 对象 ---
 
-        // Flink Job 需要一个 Table 对象来配置 Sink
-        Table targetTable = initializeIcebergTable(
-                params.get(CATALOG_NAME, "glue_catalog"), // 默认使用 glue_catalog
-                databaseName,
-                tableName
-        );
-
-        // --- 4. Source 和 DataStream ---
-
-        DataStream<SinkProto.RowRecord> pixelsRpcSource = env
-                .addSource(new PixelsSource(serverHost, serverPort)) // 假设您的 Source 接受 host/port
-                .name("pixelsRpcSource");
-
-        DataStream<RowData> pixelsRowDataStream = pixelsRpcSource
-                // 使用 ProtobufToRowDataMapFunction 进行转换
-                .map(new ProtobufToRowDataMapFunction())
-                .name("protobuf-to-rowdata-converter");
-
-        // --- 5. Iceberg Sink ---
-
-        FlinkSink.Builder sinkBuilder = FlinkSink.forRowData(pixelsRowDataStream)
-                .table(targetTable)
-                .overwrite(false); // 避免意外覆盖
 
         // 从 Iceberg Table Schema 中获取等值字段 (Equality Fields) 实现 Upsert
         // Iceberg 标识符字段（Identifier Fields）就是用于 Upsert 的键。
-        Set<String> equalityFields = targetTable.schema().identifierFieldNames();
-
-        if (equalityFields != null && !equalityFields.isEmpty()) {
-            System.out.println("Enabling Upsert mode by reading equality fields from Table Schema: " + equalityFields);
-            sinkBuilder.equalityFieldColumns((List<String>) equalityFields);
-        } else {
-            System.out.println("No identifier fields found in Iceberg Table schema. Sink will perform normal append/delete based on RowKind.");
-        }
+//        Set<String> equalityFields = targetTable.schema().identifierFieldNames();
+//
+//        if (equalityFields != null && !equalityFields.isEmpty()) {
+//            System.out.println("Enabling Upsert mode by reading equality fields from Table Schema: " + equalityFields);
+//            sinkBuilder.equalityFieldColumns((List<String>) equalityFields);
+//        } else {
+//            System.out.println("No identifier fields found in Iceberg Table schema. Sink will perform normal append/delete based on RowKind.");
+//        }
 
 
         // 附加到流环境并构建 Sink
-        DataStreamSink<RowData> sink = sinkBuilder.build();
-
-        // 在返回的 DataStreamSink 对象上设置名称
-        sink.name("iceberg-sink-to-" + databaseName + "." + tableName);
+//        DataStreamSink<RowData> sink = sinkBuilder.build();
+//
+//        // 在返回的 DataStreamSink 对象上设置名称
+//        sink.name("iceberg-sink-to-" + configdatabaseName + "." + tableName);
 
         env.execute("Pixels Flink CDC Sink Job");
     }
 
-    /**
-     * 初始化 Iceberg Table 对象，使用 GlueCatalog 示例
-     */
-    private static Table initializeIcebergTable(
-            String catalogName,
-            String databaseName,
-            String tableName) {
+    public static void startJob(StreamExecutionEnvironment env, PixelsFlinkConfig config) {
+        env.enableCheckpointing(config.checkpointIntervalMs);
 
+        RowType rowType = parseSchema(config.sourceSchema);
 
-        GlueCatalog glueCatalog = new GlueCatalog();
-        // 需要在此处配置 AWS 认证信息并调用 glueCatalog.initialize()，
-        // 例如：glueCatalog.initialize(catalogName, properties);
+        PixelsRpcSource source = new PixelsRpcSource(config);
+        DataStream<SinkProto.RowRecord> pixelsRpcStream = env
+                .addSource(source)
+                .name("PixelsRpcSource");
 
-        TableIdentifier tableIdentifier = TableIdentifier.of(databaseName, tableName);
+        DataStream<RowData> pixelsRowDataStream = pixelsRpcStream
+                .flatMap(new ProtobufToRowDataMapFunction(config))
+                .name("protobuf-to-rowdata-converter");
 
-        if (!glueCatalog.tableExists(tableIdentifier)) {
-            throw new IllegalStateException("Iceberg Table not found: " + tableIdentifier);
+        if ("iceberg".equalsIgnoreCase(config.sinkType)) {
+            configureIcebergSink(pixelsRowDataStream, config);
+        } else if ("paimon".equalsIgnoreCase(config.sinkType)) {
+            configurePaimonSink(pixelsRowDataStream, config);
+        } else {
+            throw new IllegalArgumentException("Unsupported sink type: " + config.sinkType);
+        }
+    }
+    private static RowType parseSchema(String schemaStr) {
+        String[] columns = schemaStr.split(",");
+        List<String> names = new ArrayList<>();
+        List<LogicalType> types = new ArrayList<>();
+
+        for (String col : columns) {
+            String[] parts = col.trim().split(":");
+            if (parts.length != 2) {
+                throw new IllegalArgumentException("Invalid schema format. Expected 'name:type', got: " + col);
+            }
+            String name = parts[0].trim();
+            String typeStr = parts[1].trim().toUpperCase();
+
+            names.add(name);
+            types.add(mapType(typeStr));
         }
 
-        return glueCatalog.loadTable(tableIdentifier);
+        return RowType.of(
+                types.toArray(new LogicalType[0]),
+                names.toArray(new String[0])
+        );
+    }
+    private static LogicalType mapType(String typeStr) {
+        switch (typeStr) {
+            case "INT":
+            case "INTEGER":
+                return new IntType();
+            case "STRING":
+            case "VARCHAR":
+                return new VarCharType();
+            case "BIGINT":
+            case "LONG":
+                return new BigIntType();
+            case "FLOAT":
+                return new FloatType();
+            case "DOUBLE":
+                return new DoubleType();
+            case "BOOLEAN":
+            case "BOOL":
+                return new BooleanType();
+            default:
+                throw new UnsupportedOperationException("Unsupported type in config: " + typeStr);
+        }
+    }
+
+    public static void configurePaimonSink(DataStream<RowData> stream, PixelsFlinkConfig config) {
+        String tableNameStr = config.paimonTableName;
+        if (tableNameStr == null) {
+            throw new IllegalArgumentException("Paimon table name must be specified.");
+        }
+        
+        String dbName = config.schemaName;
+        String tblName = config.tableName;
+
+        // Build Paimon Options from configuration
+        Options options = new Options();
+        options.set("catalog-type", config.paimonCatalogType);
+        options.set("warehouse", config.paimonCatalogWarehouse);
+
+        try {
+            // Create Paimon Catalog
+            org.apache.paimon.catalog.Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(options));
+
+            // Load the target table
+            Identifier identifier = Identifier.create(dbName, tblName);
+            org.apache.paimon.table.Table table = catalog.getTable(identifier);
+
+            if (table == null) {
+                throw new IllegalStateException("Paimon Table not found: " + tableNameStr);
+            }
+
+            // Build Flink Sink and attach to the stream
+            new FlinkSinkBuilder((FileStoreTable) table)
+                    .withInput(stream)
+                    .build();
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to configure Paimon sink for " + tableNameStr, e);
+        }
+    }
+
+    public static void configureIcebergSink(DataStream<RowData> stream, PixelsFlinkConfig config) {
+        String tableNameStr = config.icebergTableName;
+        if (tableNameStr == null) {
+            throw new IllegalArgumentException("Iceberg table name must be specified.");
+        }
+
+        // Parse database and table names
+        Map.Entry<String, String> parsedNames = parseDbAndTableName(tableNameStr);
+        String dbName = parsedNames.getKey();
+        String tblName = parsedNames.getValue();
+
+        // Build catalog properties
+        Map<String, String> catalogProps = new HashMap<>();
+        catalogProps.put("warehouse", config.icebergCatalogWarehouse);
+        catalogProps.put("io-impl", "org.apache.iceberg.aws.s3.S3FileIO"); // Required for S3 access
+
+        CatalogLoader catalogLoader;
+        Configuration hadoopConf = new Configuration();
+
+        // Determine Catalog Loader based on type
+        if ("glue".equalsIgnoreCase(config.icebergCatalogType)) {
+            // Use AWS Glue Catalog
+            catalogProps.put("catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog");
+
+            catalogLoader = CatalogLoader.custom("glue_catalog", catalogProps, hadoopConf,
+                    "org.apache.iceberg.aws.glue.GlueCatalog");
+        } else {
+            throw new RuntimeException("Unsupported Iceberg catalog type: " + config.icebergCatalogType);
+        }
+
+        // Load Catalog and Table Identifier
+        Catalog catalog = catalogLoader.loadCatalog();
+        TableIdentifier identifier = TableIdentifier.of(dbName, tblName);
+
+        if (!catalog.tableExists(identifier)) {
+            throw new IllegalStateException("Iceberg Table not found: " + identifier);
+        }
+
+        // Create TableLoader for the sink
+        TableLoader tableLoader = TableLoader.fromCatalog(catalogLoader, identifier);
+
+        // Build Flink Sink. It uses RowKind for CDC operations.
+        FlinkSink.forRowData(stream)
+                .tableLoader(tableLoader)
+                .append();
     }
 }

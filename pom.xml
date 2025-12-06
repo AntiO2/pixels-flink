@@ -20,17 +20,20 @@ under the License.
 		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 
-	<groupId>io.pixelsdb</groupId>
 	<artifactId>flink</artifactId>
 	<version>0.1</version>
 	<packaging>jar</packaging>
 
 	<name>Flink Walkthrough DataStream Java</name>
 	<url>https://flink.apache.org</url>
-
+	<parent>
+		<groupId>io.pixelsdb</groupId>
+		<artifactId>pixels</artifactId>
+		<version>0.2.0-SNAPSHOT</version>
+	</parent>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<flink.version>2.1.0</flink.version>
+		<flink.version>1.20.0</flink.version>
 		<target.java.version>1.8</target.java.version>
 		<maven.compiler.source>${target.java.version}</maven.compiler.source>
 		<maven.compiler.target>${target.java.version}</maven.compiler.target>
@@ -178,6 +181,19 @@ under the License.
             <scope>provided</scope>
         </dependency>
 
+
+		<dependency>
+			<groupId>io.grpc</groupId>
+			<artifactId>grpc-netty-shaded</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>io.grpc</groupId>
+			<artifactId>grpc-protobuf</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>io.grpc</groupId>
+			<artifactId>grpc-stub</artifactId>
+		</dependency>
 	</dependencies>
 
 	<build>
