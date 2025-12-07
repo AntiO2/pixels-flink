@@ -26,11 +26,13 @@
  import org.apache.flink.api.common.typeinfo.TypeInformation;
  import org.apache.flink.table.connector.RuntimeConverter.Context;
  import org.apache.flink.table.connector.source.DynamicTableSource;
- import org.apache.flink.table.data.GenericRowData;
- import org.apache.flink.table.data.RowData;
- import org.apache.flink.table.data.StringData;
+ import org.apache.flink.table.data.*;
+ import org.apache.flink.table.data.util.DataFormatConverters;
+ import org.apache.flink.table.types.logical.DecimalType;
  import org.apache.flink.table.types.logical.LogicalType;
  import org.apache.flink.table.types.logical.LogicalTypeRoot;
+ import org.apache.flink.table.types.logical.TimestampType;
+ import org.apache.flink.types.Row;
  import org.apache.flink.types.RowKind;
  import org.slf4j.Logger;
  import org.slf4j.LoggerFactory;
@@ -40,6 +42,7 @@
  import java.nio.ByteBuffer;
  import java.nio.ByteOrder;
  import java.nio.charset.StandardCharsets;
+ import java.sql.Timestamp;
  import java.util.List;
 
  public class ChangelogRowRecordDeserializer implements DeserializationSchema<RowData>
@@ -139,7 +142,7 @@
          // is needed to handle multi-row changes or use RowKind correctly.
          // For this simple rewrite, we return the final RowData image and its kind.
 
-         return (RowData) converter.toInternal(row);
+         return row;
      }
 
      // --- Type Conversion Logic Moved from Original Class ---
@@ -161,31 +164,40 @@
 
          switch (typeRoot)
          {
+             // --- Text/String Types ---
              case CHAR:
              case VARCHAR:
              {
+                 // Flink internal string type is StringData
                  String value = byteString.toString(StandardCharsets.UTF_8);
                  return StringData.fromString(value);
              }
 
              case DECIMAL:
              {
-                 // DECIMAL was serialized as a UTF-8 String representation.
+                 // Must return Flink's internal DecimalData
                  String decimalString = byteString.toString(StandardCharsets.UTF_8);
-                 // Note: The original code returned BigDecimal. For Flink RowData, we should
-                 // ideally return DecimalData, but keeping BigDecimal for structural consistency
-                 // if the converter handles it downstream.
-                 return new BigDecimal(decimalString);
+                 BigDecimal bigDecimal = new BigDecimal(decimalString);
+
+                 // Retrieve precision and scale from the logical type
+                 DecimalType decimalType = (DecimalType) type;
+                 int precision = decimalType.getPrecision();
+                 int scale = decimalType.getScale();
+
+                 // Use DecimalData factory method
+                 return DecimalData.fromBigDecimal(bigDecimal, precision, scale);
              }
 
              case BINARY:
              case VARBINARY:
              {
+                 // Binary types are represented as byte arrays
                  return byteString.toByteArray();
              }
 
+             // --- Integer Types (4 Bytes) ---
              case INTEGER:
-             case DATE:
+             case DATE: // Flink DATE is stored as number of days since epoch (INT)
              {
                  if (buffer.remaining() < Integer.BYTES)
                  {
@@ -194,25 +206,49 @@
                  return buffer.getInt();
              }
 
-             case BIGINT:
+             // Flink TIME_WITHOUT_TIME_ZONE is stored as milliseconds in a day (INT)
              case TIME_WITHOUT_TIME_ZONE:
+             {
+                 if (buffer.remaining() < Integer.BYTES) {
+                     throw new IllegalArgumentException("Invalid byte length for TIME.");
+                 }
+                 // Returns the number of milliseconds in a day (INT)
+                 return buffer.getInt();
+             }
+
+             // --- Long Types (8 Bytes) ---
+             case BIGINT:
+             {
+                 if (buffer.remaining() < Long.BYTES)
+                 {
+                     throw new IllegalArgumentException("Invalid byte length for BIGINT.");
+                 }
+                 return buffer.getLong();
+             }
+
+             // --- Timestamp Types (Uses TimestampData) ---
              case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
              case TIMESTAMP_WITH_TIME_ZONE:
              case TIMESTAMP_WITHOUT_TIME_ZONE:
              {
                  if (buffer.remaining() < Long.BYTES)
                  {
-                     throw new IllegalArgumentException("Invalid byte length for BIGINT/TIMESTAMP.");
+                     throw new IllegalArgumentException("Invalid byte length for TIMESTAMP.");
                  }
-                 return buffer.getLong();
+                 // Assuming input is epoch milliseconds (Long)
+                 long timestampLongValue = buffer.getLong();
+                 TimestampType timestampType = (TimestampType) type;
+                 return parseTimestamp(timestampLongValue, timestampType);
              }
 
+             // --- Floating Point Types ---
              case FLOAT:
              {
                  if (buffer.remaining() < Float.BYTES)
                  {
                      throw new IllegalArgumentException("Invalid byte length for FLOAT.");
                  }
+                 // Convert integer bit pattern back to float
                  int intBits = buffer.getInt();
                  return Float.intBitsToFloat(intBits);
              }
@@ -223,18 +259,36 @@
                  {
                      throw new IllegalArgumentException("Invalid byte length for DOUBLE.");
                  }
+                 // Convert long bit pattern back to double
                  long longBits = buffer.getLong();
                  return Double.longBitsToDouble(longBits);
              }
 
              case BOOLEAN:
              {
+                 // Assuming boolean is serialized as a UTF-8 string ("true" or "false")
                  String value = byteString.toStringUtf8();
                  return Boolean.parseBoolean(value);
              }
 
              default:
                  throw new UnsupportedOperationException("Unsupported type for deserialization: " + typeRoot);
+         }
+     }
+
+     private TimestampData parseTimestamp(long timestampValue, TimestampType timestampType) {
+         // Get the declared precision P from the Flink schema (e.g., TIMESTAMP(3) -> P=3)
+         int precision = timestampType.getPrecision();
+
+         // Heuristic: Use number of digits to determine the raw input unit
+
+
+         if (precision <= 3)
+         {
+                 return TimestampData.fromEpochMillis(timestampValue);
+         } else
+         {
+                 return TimestampData.fromEpochMillis(timestampValue / 1000, (int) (timestampValue % 1000));
          }
      }
 

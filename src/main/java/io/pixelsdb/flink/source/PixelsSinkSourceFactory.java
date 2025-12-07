@@ -43,13 +43,14 @@
      private final Set<ConfigOption<?>> requiredOptions;
      private final Set<ConfigOption<?>> optionalOptions;
 
-     PixelsSinkSourceFactory()
+     public PixelsSinkSourceFactory()
      {
          requiredOptions = new HashSet<>();
          requiredOptions.add(HOSTNAME);
          requiredOptions.add(PORT);
          requiredOptions.add(PixelsSinkSourceConfig.DATABASE);
          requiredOptions.add(PixelsSinkSourceConfig.TABLE);
+         requiredOptions.add(FactoryUtil.FORMAT);
 
          optionalOptions = new HashSet<>();
          optionalOptions.add(PixelsSinkSourceConfig.BUCKETS);

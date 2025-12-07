@@ -13,7 +13,7 @@ public class TestPixelsRpcClient
     {
         String host = "realtime-pixels-coordinator";
         String schemaName = "pixels_bench_sf10x";
-        String tableName = "transfer";
+        String tableName = "checking";
         int port = 9091;
         PixelsRpcClient pixelsRpcClient = new PixelsRpcClient(host, port);
         List<SinkProto.RowRecord> recordsList = pixelsRpcClient.pollEvents(schemaName, tableName);

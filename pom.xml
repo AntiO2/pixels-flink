@@ -33,11 +33,10 @@ under the License.
 	</parent>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<flink.version>1.20.0</flink.version>
+		<flink.version>1.20.3</flink.version>
 		<target.java.version>1.8</target.java.version>
 		<maven.compiler.source>${target.java.version}</maven.compiler.source>
 		<maven.compiler.target>${target.java.version}</maven.compiler.target>
-		<log4j.version>2.24.3</log4j.version>
         <pixels.version>0.2.0-SNAPSHOT</pixels.version>
 	</properties>
 
@@ -61,11 +60,6 @@ under the License.
             <artifactId>pixels-common</artifactId>
             <version>${pixels.version}</version>
         </dependency>
-		<dependency>
-			<groupId>org.apache.flink</groupId>
-			<artifactId>flink-walkthrough-common</artifactId>
-			<version>${flink.version}</version>
-		</dependency>
 
 		<!-- This dependency is provided, because it should not be packaged into the JAR file. -->
 		<dependency>
@@ -80,36 +74,24 @@ under the License.
 			<version>${flink.version}</version>
 			<scope>provided</scope>
 		</dependency>
-
-		<!-- Add connector dependencies here. They must be in the default scope (compile). -->
-
-		<!-- Example:
-
-		<dependency>
-		    <groupId>org.apache.flink</groupId>
-		    <artifactId>flink-connector-kafka</artifactId>
-		    <version>3.0.0-1.17</version>
-		</dependency>
-		-->
-
-		<!-- Add logging framework, to produce console output when running in the IDE. -->
-		<!-- These dependencies are excluded from the application JAR by default. -->
 		<dependency>
 			<groupId>org.apache.logging.log4j</groupId>
 			<artifactId>log4j-slf4j-impl</artifactId>
-			<version>${log4j.version}</version>
 			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
+			<scope>provided</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.logging.log4j</groupId>
 			<artifactId>log4j-api</artifactId>
-			<version>${log4j.version}</version>
 			<scope>runtime</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.logging.log4j</groupId>
 			<artifactId>log4j-core</artifactId>
-			<version>${log4j.version}</version>
 			<scope>runtime</scope>
 		</dependency>
 
@@ -123,38 +105,9 @@ under the License.
 
         <dependency>
             <groupId>org.apache.flink</groupId>
-            <artifactId>flink-connector-files</artifactId>
-            <version>${flink.version}</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.flink</groupId>
             <artifactId>flink-table-runtime</artifactId>
             <version>${flink.version}</version>
             <scope>provided</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-clients</artifactId>
-            <version>${flink.version}</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-sql-gateway</artifactId>
-            <version>${flink.version}</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-sql-gateway</artifactId>
-            <version>${flink.version}</version>
-            <type>test-jar</type>
-            <scope>test</scope>
         </dependency>
 
 		<dependency>
@@ -163,32 +116,30 @@ under the License.
 		</dependency>
 		<dependency>
 			<groupId>io.grpc</groupId>
-			<artifactId>grpc-protobuf</artifactId>
+			<artifactId>grpc-stub</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>io.grpc</groupId>
-			<artifactId>grpc-stub</artifactId>
+			<artifactId>grpc-protobuf</artifactId>
 		</dependency>
-
-
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-test-utils</artifactId>
             <version>${flink.version}</version>
-            <scope>test</scope>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-table-api-java</artifactId>
             <version>${flink.version}</version>
-            <scope>test</scope>
+            <scope>provided</scope>
         </dependency>
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-table-planner-loader</artifactId>
-            <version>${flink.version}</version>
-            <scope>test</scope>
-        </dependency>
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-table-planner-loader</artifactId>
+			<version>${flink.version}</version>
+			<scope>provided</scope>
+		</dependency>
 	</dependencies>
 
 	<build>
@@ -219,26 +170,10 @@ under the License.
 								<excludes>
 									<exclude>org.apache.flink:flink-shaded-force-shading</exclude>
 									<exclude>com.google.code.findbugs:jsr305</exclude>
-									<exclude>org.slf4j:*</exclude>
-									<exclude>org.apache.logging.log4j:*</exclude>
 								</excludes>
 							</artifactSet>
-							<filters>
-								<filter>
-									<!-- Do not copy the signatures in the META-INF folder.
-                                    Otherwise, this might cause SecurityExceptions when using the JAR. -->
-									<artifact>*:*</artifact>
-									<excludes>
-										<exclude>META-INF/*.SF</exclude>
-										<exclude>META-INF/*.DSA</exclude>
-										<exclude>META-INF/*.RSA</exclude>
-									</excludes>
-								</filter>
-							</filters>
 							<transformers>
-								<transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-									<mainClass>io.pixelsdb.flink.PixelsFlinkSinkJob</mainClass>
-								</transformer>
+								<transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
 							</transformers>
 						</configuration>
 					</execution>

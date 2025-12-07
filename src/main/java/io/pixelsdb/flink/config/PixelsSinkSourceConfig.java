@@ -25,23 +25,23 @@
 
  public class PixelsSinkSourceConfig
  {
-     public static final ConfigOption<String> HOSTNAME = ConfigOptions.key("hostname")
+     public static final ConfigOption<String> HOSTNAME = ConfigOptions.key("pixels.host")
              .stringType()
              .noDefaultValue();
 
-     public static final ConfigOption<Integer> PORT = ConfigOptions.key("port")
+     public static final ConfigOption<Integer> PORT = ConfigOptions.key("pixels.port")
              .intType()
              .defaultValue(9091);
 
-     public static final ConfigOption<String> DATABASE = ConfigOptions.key("source-database")
+     public static final ConfigOption<String> DATABASE = ConfigOptions.key("pixels.database")
              .stringType()
              .noDefaultValue();
 
-     public static final ConfigOption<String> TABLE = ConfigOptions.key("source-table")
+     public static final ConfigOption<String> TABLE = ConfigOptions.key("pixels.table")
              .stringType()
              .noDefaultValue();
 
-     public static final ConfigOption<String> BUCKETS = ConfigOptions.key("buckets")
+     public static final ConfigOption<String> BUCKETS = ConfigOptions.key("pixels.buckets")
              .stringType()
              .noDefaultValue();
  }

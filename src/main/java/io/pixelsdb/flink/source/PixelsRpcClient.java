@@ -4,6 +4,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.pixelsdb.pixels.sink.PixelsPollingServiceGrpc;
 import io.pixelsdb.pixels.sink.SinkProto;
+import io.grpc.internal.DnsNameResolverProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,6 +22,7 @@ public class PixelsRpcClient implements Closeable
     public PixelsRpcClient(String host, int port)
     {
         this(ManagedChannelBuilder.forAddress(host, port)
+                .nameResolverFactory(new DnsNameResolverProvider())
                 .usePlaintext()
                 .build());
     }
