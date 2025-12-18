@@ -30,18 +30,23 @@
  import org.apache.flink.table.data.RowData;
  import org.apache.flink.table.types.DataType;
 
+ import java.util.ArrayList;
+ import java.util.Collections;
+ import java.util.List;
+
  public class PixelsSinkTableSource implements ScanTableSource
  {
      private final String hostname;
      private final int port;
      private final String schemaName;
      private final String tableName;
-     private final String buckets;
+     private final String bucketStr;
+     private final List<Integer> buckets;
      private final DecodingFormat<DeserializationSchema<RowData>> decodingFormat;
 
      private final DataType producedDataType;
 
-     public PixelsSinkTableSource(String hostname, int port, String database, String tableName, String buckets,
+     public PixelsSinkTableSource(String hostname, int port, String database, String tableName, String bucketsStr,
                                   DecodingFormat<DeserializationSchema<RowData>> decodingFormat,
                                   DataType producedDataType)
      {
@@ -51,7 +56,8 @@
          this.tableName = tableName;
          this.decodingFormat = decodingFormat;
          this.producedDataType = producedDataType;
-         this.buckets = buckets;
+         this.bucketStr = bucketsStr;
+         this.buckets = parseBuckets(bucketsStr);
      }
 
 
@@ -73,6 +79,7 @@
                  port,
                  schemaName,
                  tableName,
+                 buckets,
                  deserializer);
 
          return SourceFunctionProvider.of(sourceFunction, false);
@@ -81,12 +88,31 @@
      @Override
      public DynamicTableSource copy()
      {
-         return new PixelsSinkTableSource(hostname, port, schemaName, tableName, buckets, decodingFormat, producedDataType);
+         return new PixelsSinkTableSource(hostname, port, schemaName, tableName, bucketStr, decodingFormat, producedDataType);
      }
 
      @Override
      public String asSummaryString()
      {
          return "Pixels Sink Source";
+     }
+
+     private List<Integer> parseBuckets(String buckets)
+     {
+         if (buckets == null || buckets.trim().isEmpty())
+         {
+             return Collections.emptyList();
+         }
+
+         List<Integer> result = new ArrayList<>();
+         for (String part : buckets.split(","))
+         {
+             part = part.trim();
+             if (!part.isEmpty())
+             {
+                 result.add(Integer.parseInt(part));
+             }
+         }
+         return result;
      }
  }

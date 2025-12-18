@@ -33,11 +33,12 @@ public class PixelsRpcClient implements Closeable
         this.blockingStub = PixelsPollingServiceGrpc.newBlockingStub(channel);
     }
 
-    public List<SinkProto.RowRecord> pollEvents(String schemaName, String tableName)
+    public List<SinkProto.RowRecord> pollEvents(String schemaName, String tableName, List<Integer> buckets)
     {
         SinkProto.PollRequest request = SinkProto.PollRequest.newBuilder()
                 .setSchemaName(schemaName)
                 .setTableName(tableName)
+                .addAllBuckets(buckets)
                 .build();
         try
         {

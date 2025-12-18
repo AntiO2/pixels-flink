@@ -11,6 +11,7 @@ public class TestPixelsRpcSourceTableApi {
     static int port = 9091;
     static String schemaName = "pixels_bench_sf10x";
     static String tableName = "checking";
+    static String bucketStr = "0,3";
 
     public static void main(String[] args)  throws Exception {
         testSourceRegistrationAndRead();
@@ -47,6 +48,7 @@ public class TestPixelsRpcSourceTableApi {
                 .option(PixelsSinkSourceConfig.PORT, 9091)
                 .option(PixelsSinkSourceConfig.DATABASE, schemaName)
                 .option(PixelsSinkSourceConfig.TABLE, tableName)
+                .option(PixelsSinkSourceConfig.BUCKETS, bucketStr)
                 .build();
 
         // 4. Create the Temporary Table (Register the Descriptor with Table Environment)

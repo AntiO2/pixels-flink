@@ -23,14 +23,16 @@ public class PixelsRpcSource extends RichSourceFunction<RowData> implements Resu
     private final String tableName;
     private final ChangelogRowRecordDeserializer deserializer;
     private transient PixelsRpcClient client;
+    private final List<Integer> buckets;
     private volatile boolean isRunning = true;
 
-    public PixelsRpcSource(String host, int port, String schemaName, String tableName, DeserializationSchema<RowData> deserializer)
+    public PixelsRpcSource(String host, int port, String schemaName, String tableName, List<Integer> buckets, DeserializationSchema<RowData> deserializer)
     {
         this.host = host;
         this.port = port;
         this.schemaName = schemaName;
         this.tableName = tableName;
+        this.buckets = buckets;
         this.deserializer = (ChangelogRowRecordDeserializer) deserializer;
     }
 
@@ -50,7 +52,7 @@ public class PixelsRpcSource extends RichSourceFunction<RowData> implements Resu
             try
             {
                 // Poll events
-                List<SinkProto.RowRecord> events = client.pollEvents(schemaName, tableName);
+                List<SinkProto.RowRecord> events = client.pollEvents(schemaName, tableName, buckets);
                 for (SinkProto.RowRecord event : events)
                 {
                     ctx.collect(deserializer.deserialize(event));
